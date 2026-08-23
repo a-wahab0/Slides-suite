@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width,initial-scale=1.0" name="viewport"/>
+<title>Dietitian JSON → PDF Slide Suite</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&amp;family=Poppins:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+<script>
+tailwind.config={theme:{extend:{colors:{brand:{green:'#3d7042',lightgreen:'#edf5ee',pink:'#e84c7d',lightpink:'#fdf0f4',purple:'#7d5eb5',lightpurple:'#f2eefa',yellow:'#e69d25',lightyellow:'#fdf8ec',blue:'#4a90e2',lightblue:'#eef5fc'}},fontFamily:{sans:['Poppins','sans-serif'],heading:['Montserrat','sans-serif']}}}};
+</script>
+<style>
+body{background:#f3f4f6;font-family:Poppins,sans-serif;color:#333}
+.slide-canvas{width:1000px;height:625px;background:linear-gradient(135deg,#fff 0%,#fcf8f6 100%);position:relative;box-shadow:0 10px 30px rgba(0,0,0,.12);overflow:hidden;border-radius:12px;margin:0 auto;flex-shrink:0}
+[contenteditable=true]{outline:none;border-radius:4px;padding:1px 4px}
+.edit-mode [contenteditable=true]:hover{background:rgba(232,76,125,.08);box-shadow:0 0 0 1px rgba(232,76,125,.3);cursor:text}
+.edit-mode [contenteditable=true]:focus{background:rgba(255,255,255,.9);box-shadow:0 0 0 2px #e84c7d}
+.bg-leaf-1{position:absolute;top:-30px;right:-30px;width:260px;opacity:.18;pointer-events:none}
+.bg-curve-top{position:absolute;top:0;left:0;width:100%;height:120px;background:radial-gradient(circle at 10% -20%,rgba(232,76,125,.15),transparent 70%);pointer-events:none}
+::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:#f1f1f1}::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px}
+@media(max-width:1050px){.slide-canvas{transform-origin:top center}.slide-container{padding:12px}.desktop-only{display:none}}
+
+/* JSON project rendering fixes */
+#slidesWrapper{width:100%;}
+.slide-canvas{width:1000px;min-height:625px;height:auto;box-sizing:border-box;overflow:visible;position:relative;}
+.slide-canvas.hidden{display:none!important;}
+.slide-canvas > .standard-footer{
+position:relative!important;left:auto!important;right:auto!important;bottom:auto!important;margin-top:auto!important;min-height:28px;display:flex!important;align-items:center!important;justify-content:space-between!important;z-index:50!important;background:transparent!important;
+}
+.slide-canvas > .standard-footer *{position:relative;}
+.recipe-info-box{align-self:stretch;flex-shrink:0;}
+.recipe-info-box .flex.items-center.justify-between{min-width:0;}
+.recipe-info-box [contenteditable="true"]{overflow-wrap:anywhere;word-break:break-word;}
+.slide-canvas > *{max-width:100%;}
+.slide-canvas ul,.slide-canvas ol{overflow-wrap:anywhere;}
+@media(max-width:1100px){.slide-canvas{transform-origin:top center;transform:scale(.85);margin-bottom:-90px;}}
+</style>
+</head>
+<body class="edit-mode min-h-screen flex flex-col">
+<header class="no-print bg-slate-900 text-white shadow-md z-30 sticky top-0 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+<div class="flex items-center gap-3">
+<div class="bg-gradient-to-r from-emerald-500 to-pink-500 p-2 rounded-lg font-bold text-lg w-10 h-10 flex items-center justify-center"><i class="fa-solid fa-leaf"></i></div>
+<div><h1 class="font-bold text-base">Dietitian Slide Suite</h1><p class="text-xs text-slate-400">JSON → Editable Slides → PDF</p></div>
+</div>
+<div class="flex items-center gap-1 bg-slate-800 p-1 rounded-xl text-xs border border-slate-700 overflow-x-auto max-w-xl" id="slideTabsContainer"></div>
+<div class="flex items-center gap-2 flex-wrap">
+<button class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-xs font-semibold" onclick="triggerLoadJSON()"><i class="fa-solid fa-upload"></i> Load JSON</button>
+<button class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-lg text-xs" onclick="exportJSON()"><i class="fa-solid fa-download"></i> Save JSON</button>
+<button class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-xs font-semibold" onclick="duplicateCurrentSlide()"><i class="fa-solid fa-copy"></i> Duplicate</button>
+<button class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-xs" onclick="toggleBrandDrawer()"><i class="fa-solid fa-address-card text-emerald-400"></i> Brand</button>
+<button class="px-3.5 py-1.5 bg-pink-600 hover:bg-pink-500 rounded-lg text-xs font-semibold" onclick="openPdfModal()"><i class="fa-solid fa-file-pdf"></i> Export PDF</button>
+<button class="px-3.5 py-1.5 bg-orange-600 hover:bg-orange-500 rounded-lg text-xs font-semibold" onclick="exportPPTX()"><i class="fa-solid fa-file-powerpoint"></i> Export PPT</button>
+<input accept=".json,application/json" class="hidden" id="jsonFileInput" type="file"/>
+</div>
+</header>
+<div class="flex-1 flex overflow-hidden relative">
+<aside class="no-print bg-white w-80 border-r border-slate-200 p-5 shadow-xl hidden flex-col justify-between overflow-y-auto z-20" id="brandDrawer">
+<div>
+<div class="flex justify-between pb-3 border-b mb-4"><h2 class="font-bold text-sm"><i class="fa-solid fa-sliders text-pink-500"></i> Global Branding</h2><button onclick="toggleBrandDrawer()"><i class="fa-solid fa-xmark"></i></button></div>
+<div class="space-y-4 text-xs">
+<label class="block">Dietitian Full Name<input class="w-full mt-1 px-3 py-2 border rounded-md" id="global-name" oninput="updateGlobalBranding()" value="Muneeba Munir"/></label>
+<label class="block">Qualification / Title<input class="w-full mt-1 px-3 py-2 border rounded-md" id="global-title" oninput="updateGlobalBranding()" value="DIETITIAN | BS HND"/></label>
+<label class="block">Phone Number<input class="w-full mt-1 px-3 py-2 border rounded-md" id="global-phone" oninput="updateGlobalBranding()" value="+92 315 5687486"/></label>
+<label class="block">Instagram Handle<input class="w-full mt-1 px-3 py-2 border rounded-md" id="global-insta" oninput="updateGlobalBranding()" value="muneeba_munir07"/></label>
+<label class="block">Slogan / Tagline<input class="w-full mt-1 px-3 py-2 border rounded-md" id="global-tagline" oninput="updateGlobalBranding()" value="NOURISHING BODIES, ENRICHING LIVES"/></label>
+</div>
+</div>
+<p class="pt-4 border-t text-[11px] text-slate-400 italic">Edit these fields to synchronize branding across every slide.</p>
+</aside>
+<main class="flex-1 overflow-auto p-6 flex flex-col items-center slide-container" id="mainCanvasContainer">
+<div class="no-print mb-3 text-center text-xs text-slate-500 bg-slate-200/60 px-4 py-1.5 rounded-full border">
+<i class="fa-solid fa-i-cursor text-pink-500"></i> Click any text to edit. Upload your JSON to populate the deck.
+  </div>
+<div class="flex flex-col items-center" id="slidesWrapper"></div></main></div>
+<div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center hidden" id="pdfModal">
+<div class="bg-white w-full max-w-md rounded-2xl shadow-2xl p-6 relative">
+<div class="flex justify-between pb-3 border-b mb-4"><h3 class="font-bold"><i class="fa-solid fa-file-pdf text-pink-600"></i> Select Pages</h3><button onclick="closePdfModal()"><i class="fa-solid fa-xmark"></i></button></div>
+<div class="flex justify-between mb-3 text-xs"><span>Choose pages:</span><div><button class="text-pink-600" onclick="selectAllPages(true)">Select All</button> | <button onclick="selectAllPages(false)">Clear</button></div></div>
+<div class="space-y-2 max-h-60 overflow-y-auto mb-5" id="modalPageList"></div>
+<div class="flex justify-end gap-3 pt-3 border-t"><button class="px-4 py-2 bg-slate-100 rounded-lg text-xs" onclick="closePdfModal()">Cancel</button><button class="px-5 py-2 bg-emerald-600 text-white rounded-lg text-xs font-semibold" onclick="generateCustomPdf()"><i class="fa-solid fa-download"></i> Download PDF</button></div>
+<div class="absolute inset-0 bg-white/95 rounded-2xl flex flex-col items-center justify-center hidden" id="pdfProgressOverlay"><div class="w-10 h-10 border-4 border-pink-500 border-t-transparent rounded-full animate-spin mb-3"></div><p class="text-xs font-bold" id="pdfStatusText"></p></div>
+</div></div>
+<script>const INITIAL_SLIDES = [{"slideNumber": 1, "htmlContent": "\n                <!-- Background Organic Shapes -->\n                <svg class=\"bg-leaf-1\" viewBox=\"0 0 200 200\" fill=\"none\"><path d=\"M100 0C150 50 180 120 180 200C100 200 20 150 0 100C30 30 70 0 100 0Z\" fill=\"#3d7042\"></path></svg>\n                <div class=\"bg-curve-top\"></div>\n\n                <!-- Top Header Bar -->\n                <div class=\"flex items-start justify-between z-10 relative\">\n                    <div>\n                        <div class=\"flex items-baseline space-x-2\">\n                            <span contenteditable=\"true\" class=\"brand-name font-heading font-extrabold text-4xl text-brand-green tracking-tight\">Muneeba</span>\n                            <span contenteditable=\"true\" class=\"brand-name-last font-heading font-extrabold text-4xl text-brand-pink tracking-tight\">Munir</span>\n                            <i class=\"fa-solid fa-leaf text-brand-green text-xl ml-1\"></i>\n                        </div>\n                        <p contenteditable=\"true\" class=\"brand-title text-brand-pink font-semibold text-xs tracking-widest mt-1\">DIETITIAN | BS HND</p>\n                        \n                        <h2 contenteditable=\"true\" class=\"font-heading font-bold text-xl text-slate-800 tracking-wide mt-6 border-b-2 border-brand-green pb-1 inline-block\">\n                            PERSONALIZED <span class=\"text-brand-pink\">NUTRITION PLAN</span>\n                        </h2>\n                    </div>\n\n                    <!-- Contact Badge Top Right -->\n                    <div class=\"bg-white/90 backdrop-blur-sm p-3.5 rounded-2xl shadow-sm border border-slate-100 space-y-2 text-xs text-slate-600 w-56\">\n                        <div class=\"flex items-center space-x-2.5\">\n                            <span class=\"w-6 h-6 rounded-full bg-brand-lightgreen text-brand-green flex items-center justify-center text-xs\"><i class=\"fa-solid fa-user\"></i></span>\n                            <span contenteditable=\"true\" class=\"brand-name-full font-medium\">Muneeba Munir</span>\n                        </div>\n                        <div class=\"flex items-center space-x-2.5\">\n                            <span class=\"w-6 h-6 rounded-full bg-brand-lightpink text-brand-pink flex items-center justify-center text-xs\"><i class=\"fa-solid fa-phone\"></i></span>\n                            <span contenteditable=\"true\" class=\"brand-phone font-medium\">+92 315 5687486</span>\n                        </div>\n                        <div class=\"flex items-center space-x-2.5\">\n                            <span class=\"w-6 h-6 rounded-full bg-brand-lightpurple text-brand-purple flex items-center justify-center text-xs\"><i class=\"fa-brands fa-instagram\"></i></span>\n                            <span contenteditable=\"true\" class=\"brand-insta font-medium\">muneeba_munir07</span>\n                        </div>\n                    </div>\n                </div>\n\n                <!-- Client Info Grid Boxes -->\n                <div class=\"grid grid-cols-3 gap-4 my-auto z-10 relative\">\n                    <!-- Client Name -->\n                    <div class=\"bg-white p-3.5 rounded-2xl shadow-sm border border-slate-100 flex items-center space-x-3\">\n                        <div class=\"w-10 h-10 rounded-xl bg-brand-green text-white flex items-center justify-center text-base shadow-sm\">\n                            <i class=\"fa-solid fa-user-large\"></i>\n                        </div>\n                        <div class=\"flex-1\">\n                            <label class=\"block text-[11px] font-semibold text-slate-400 uppercase tracking-wider\">Client Name</label>\n                            <div contenteditable=\"true\" class=\"font-semibold text-slate-800 text-sm border-b border-dashed border-slate-300 min-h-[22px] focus:border-brand-pink\">Muhammad Maaz&nbsp;</div>\n                        </div>\n                    </div>\n\n                    <!-- Date -->\n                    <div class=\"bg-white p-3.5 rounded-2xl shadow-sm border border-slate-100 flex items-center space-x-3\">\n                        <div class=\"w-10 h-10 rounded-xl bg-brand-pink text-white flex items-center justify-center text-base shadow-sm\">\n                            <i class=\"fa-solid fa-calendar-days\"></i>\n                        </div>\n                        <div class=\"flex-1\">\n                            <label class=\"block text-[11px] font-semibold text-slate-400 uppercase tracking-wider\">Date</label>\n                            <div contenteditable=\"true\" class=\"font-semibold text-slate-800 text-sm border-b border-dashed border-slate-300 min-h-[22px] focus:border-brand-pink\">16 August 2026</div>\n                        </div>\n                    </div>\n\n                    <!-- Age -->\n                    <div class=\"bg-white p-3.5 rounded-2xl shadow-sm border border-slate-100 flex items-center space-x-3\">\n                        <div class=\"w-10 h-10 rounded-xl bg-brand-purple text-white flex items-center justify-center text-base shadow-sm\">\n                            <i class=\"fa-solid fa-cake-candles\"></i>\n                        </div>\n                        <div class=\"flex-1\">\n                            <label class=\"block text-[11px] font-semibold text-slate-400 uppercase tracking-wider\">Age</label>\n                            <div contenteditable=\"true\" class=\"font-semibold text-slate-800 text-sm border-b border-dashed border-slate-300 min-h-[22px] focus:border-brand-pink\">36 Years</div>\n                        </div>\n                    </div>\n\n                    <!-- Gender -->\n                    <div class=\"bg-white p-3.5 rounded-2xl shadow-sm border border-slate-100 flex items-center space-x-3\">\n                        <div class=\"w-10 h-10 rounded-xl bg-brand-purple text-white flex items-center justify-center text-base shadow-sm\">\n                            <i class=\"fa-solid fa-venus-mars\"></i>\n                        </div>\n                        <div class=\"flex-1\">\n                            <label class=\"block text-[11px] font-semibold text-slate-400 uppercase tracking-wider\">Gender</label>\n                            <div contenteditable=\"true\" class=\"font-semibold text-slate-800 text-sm border-b border-dashed border-slate-300 min-h-[22px] focus:border-brand-pink\">Male</div>\n                        </div>\n                    </div>\n\n                    <!-- Height -->\n                    <div class=\"bg-white p-3.5 rounded-2xl shadow-sm border border-slate-100 flex items-center space-x-3\">\n                        <div class=\"w-10 h-10 rounded-xl bg-brand-green text-white flex items-center justify-center text-base shadow-sm\">\n                            <i class=\"fa-solid fa-ruler-vertical\"></i>\n                        </div>\n                        <div class=\"flex-1\">\n                            <label class=\"block text-[11px] font-semibold text-slate-400 uppercase tracking-wider\">Height</label>\n                            <div contenteditable=\"true\" id=\"height-input\" oninput=\"calcBMI()\" class=\"font-semibold text-slate-800 text-sm border-b border-dashed border-slate-300 min-h-[22px] focus:border-brand-pink\">5 ft 8 in (172.72 cm)</div>\n                        </div>\n                    </div>\n\n                    <!-- Weight -->\n                    <div class=\"bg-white p-3.5 rounded-2xl shadow-sm border border-slate-100 flex items-center space-x-3\">\n                        <div class=\"w-10 h-10 rounded-xl bg-brand-pink text-white flex items-center justify-center text-base shadow-sm\">\n                            <i class=\"fa-solid fa-weight-scale\"></i>\n                        </div>\n                        <div class=\"flex-1\">\n                            <label class=\"block text-[11px] font-semibold text-slate-400 uppercase tracking-wider\">Weight</label>\n                            <div contenteditable=\"true\" id=\"weight-input\" oninput=\"calcBMI()\" class=\"font-semibold text-slate-800 text-sm border-b border-dashed border-slate-300 min-h-[22px] focus:border-brand-pink\">159 kg</div>\n                        </div>\n                    </div>\n\n                    <!-- BMI (Full Width Row) -->\n                    <div class=\"col-span-3 bg-white p-3.5 rounded-2xl shadow-sm border border-slate-100 flex items-center space-x-3\">\n                        <div class=\"w-10 h-10 rounded-xl bg-brand-yellow text-white flex items-center justify-center text-base shadow-sm font-bold\">\n                            BMI\n                        </div>\n                        <div class=\"flex-1 flex items-center justify-between pr-4\">\n                            <div>\n                                <label class=\"block text-[11px] font-semibold text-slate-400 uppercase tracking-wider\">BMI (Body Mass Index)</label>\n                                <div contenteditable=\"true\" id=\"bmi-display\" class=\"font-semibold text-slate-800 text-sm border-b border-dashed border-slate-300 min-h-[22px] focus:border-brand-pink\">306.7 (Obese)</div>\n                            </div>\n                            <span class=\"text-xs text-slate-400 italic\">Target Range: 18.5 - 24.9</span>\n                        </div>\n                    </div>\n                </div>\n\n                <!-- Common Footer Bar -->\n                <div class=\"border-t border-slate-200/80 pt-3 flex items-center justify-between text-xs text-slate-500 z-10 relative\">\n                    <div class=\"flex items-center space-x-2\">\n                        <div class=\"w-6 h-6 rounded-full bg-pink-100 text-brand-pink flex items-center justify-center text-xs\">\n                            <i class=\"fa-solid fa-heart-pulse\"></i>\n                        </div>\n                        <div>\n                            <span contenteditable=\"true\" class=\"brand-tagline font-semibold text-slate-700 tracking-wider\">NOURISHING BODIES, ENRICHING LIVES</span>\n                        </div>\n                    </div>\n                    <div class=\"flex items-center space-x-6\">\n                        <span contenteditable=\"true\" class=\"brand-name-full flex items-center gap-1.5 font-medium\"><i class=\"fa-solid fa-user text-brand-green\"></i> Muneeba Munir</span>\n                        <span contenteditable=\"true\" class=\"brand-phone flex items-center gap-1.5 font-medium\"><i class=\"fa-solid fa-phone text-brand-pink\"></i> +92 315 5687486</span>\n                        <span contenteditable=\"true\" class=\"brand-insta flex items-center gap-1.5 font-medium\"><i class=\"fa-brands fa-instagram text-brand-purple\"></i> muneeba_munir07</span>\n                    </div>\n                </div>\n            "}, {"slideNumber": 2, "htmlContent": "\n                <svg class=\"bg-leaf-1\" viewBox=\"0 0 200 200\" fill=\"none\"><path d=\"M100 0C150 50 180 120 180 200C100 200 20 150 0 100C30 30 70 0 100 0Z\" fill=\"#3d7042\"></path></svg>\n\n                <!-- Header -->\n                <div class=\"z-10 relative\">\n                    <div class=\"flex items-center space-x-2\">\n                        <h2 contenteditable=\"true\" class=\"font-heading font-extrabold text-3xl text-brand-green\">Daily <span class=\"text-brand-pink\">Meal Plan</span></h2>\n                        <i class=\"fa-solid fa-leaf text-brand-pink text-2xl\"></i>\n                    </div>\n                    <p contenteditable=\"true\" class=\"text-xs text-slate-500 mt-1\">Complete portions and calories according to the individual plan.</p>\n                </div>\n\n                <!-- Meal Table -->\n                <div class=\"my-auto z-10 relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm\">\n                    <table class=\"w-full text-left text-xs border-collapse\">\n                        <thead>\n                            <tr class=\"text-white font-semibold\">\n                                <th class=\"py-2.5 px-4 bg-brand-green w-1/5\">\n                                    <div class=\"flex items-center justify-between\">\n                                        <span>TIME</span> <i class=\"fa-regular fa-clock\"></i>\n                                    </div>\n                                </th>\n                                <th class=\"py-2.5 px-4 bg-brand-pink w-1/5\">\n                                    <div class=\"flex items-center justify-between\">\n                                        <span>MEAL</span> <i class=\"fa-solid fa-utensils\"></i>\n                                    </div>\n                                </th>\n                                <th class=\"py-2.5 px-4 bg-[#6b8e4e] w-2/5\">\n                                    <div class=\"flex items-center justify-between\">\n                                        <span>FOOD / PORTION</span> <i class=\"fa-solid fa-bowl-food\"></i>\n                                    </div>\n                                </th>\n                                <th class=\"py-2.5 px-4 bg-brand-purple w-1/5 text-right\">\n                                    <div class=\"flex items-center justify-between\">\n                                        <span>CALORIES</span> <i class=\"fa-solid fa-fire\"></i>\n                                    </div>\n                                </th>\n                            </tr>\n                        </thead>\n                        <tbody class=\"divide-y divide-slate-100 text-slate-700\">\n                            <tr class=\"hover:bg-slate-50/80\">\n                                <td class=\"py-2 px-4 font-semibold text-brand-green flex items-center space-x-2\">\n                                    <span class=\"w-6 h-6 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center text-xs\"><i class=\"fa-solid fa-sun\"></i></span>\n                                    <span contenteditable=\"true\">Early Morning</span>\n                                </td>\n                                <td contenteditable=\"true\" class=\"py-2 px-4\">Warm Lemon Water&nbsp;</td>\n                                <td contenteditable=\"true\" class=\"py-2 px-4\">1 Glass&nbsp;</td>\n                                <td class=\"py-2 px-4 text-right font-medium\"><span contenteditable=\"true\" class=\"meal-cal\" oninput=\"calculateTotalCalories()\">45</span> kcal</td>\n                            </tr>\n                            <tr class=\"hover:bg-slate-50/80\">\n                                <td class=\"py-2 px-4 font-semibold text-brand-green flex items-center space-x-2\">\n                                    <span class=\"w-6 h-6 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center text-xs\"><i class=\"fa-solid fa-mug-hot\"></i></span>\n                                    <span contenteditable=\"true\">Breakfast</span>\n                                </td>\n                                <td contenteditable=\"true\" class=\"py-2 px-4\">Oatmeal &amp; Eggs</td>\n                                <td contenteditable=\"true\" class=\"py-2 px-4\">3 tbsp oats +1&nbsp; boiled egg&nbsp;</td>\n                                <td class=\"py-2 px-4 text-right font-medium\"><span contenteditable=\"true\" class=\"meal-cal\" oninput=\"calculateTotalCalories()\">320</span> kcal</td>\n                            </tr>\n                            <tr class=\"hover:bg-slate-50/80\">\n                                <td class=\"py-2 px-4 font-semibold text-brand-green flex items-center space-x-2\">\n                                    <span class=\"w-6 h-6 rounded-full bg-pink-50 text-pink-600 flex items-center justify-center text-xs\"><i class=\"fa-solid fa-apple-whole\"></i></span>\n                                    <span contenteditable=\"true\">Mid-Morning Snack</span>\n                                </td>\n                                <td contenteditable=\"true\" class=\"py-2 px-4\">Yogurt dip</td>\n                                <td contenteditable=\"true\" class=\"py-2 px-4\">2/3 cup yogurt+1 medium green apple + 6almonds+1 tbsp chia seeds+2/3banana</td>\n                                <td class=\"py-2 px-4 text-right font-medium\"><span contenteditable=\"true\" class=\"meal-cal\" oninput=\"calculateTotalCalories()\">130</span> kcal</td>\n                            </tr>\n                            <tr class=\"hover:bg-slate-50/80\">\n                                <td class=\"py-2 px-4 font-semibold text-brand-green flex items-center space-x-2\">\n                                    <span class=\"w-6 h-6 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center text-xs\"><i class=\"fa-solid fa-plate-wheat\"></i></span>\n                                    <span contenteditable=\"true\">Lunch</span>\n                                </td>\n                                <td contenteditable=\"true\" class=\"py-2 px-4\">&nbsp;Chicken wrap&nbsp;</td>\n                                <td contenteditable=\"true\" class=\"py-2 px-4\">60g grilled breast + 1 cup vege + 6 inch (35g) roti</td>\n                                <td class=\"py-2 px-4 text-right font-medium\"><span contenteditable=\"true\" class=\"meal-cal\" oninput=\"calculateTotalCalories()\">410</span> kcal</td>\n                            </tr>\n                            <tr class=\"hover:bg-slate-50/80\">\n                                <td class=\"py-2 px-4 font-semibold text-brand-green flex items-center space-x-2\">\n                                    <span class=\"w-6 h-6 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center text-xs\"><i class=\"fa-solid fa-glass-water\"></i></span>\n                                    <span contenteditable=\"true\">Evening Snack</span>\n                                </td>\n                                <td contenteditable=\"true\" class=\"py-2 px-4\">&nbsp;Chana chat salad with 3 dates<br></td>\n                                <td contenteditable=\"true\" class=\"py-2 px-4\">1/2 cup chickpeas+1/2 veges (onion tomato cucumber) +corn+ chat masala+ lemon juice&nbsp;</td>\n                                <td class=\"py-2 px-4 text-right font-medium\"><span contenteditable=\"true\" class=\"meal-cal\" oninput=\"calculateTotalCalories()\">110</span> kcal</td>\n                            </tr>\n                            <tr class=\"hover:bg-slate-50/80\">\n                                <td class=\"py-2 px-4 font-semibold text-brand-green flex items-center space-x-2\">\n                                    <span class=\"w-6 h-6 rounded-full bg-pink-50 text-pink-600 flex items-center justify-center text-xs\"><i class=\"fa-solid fa-utensils\"></i></span>\n                                    <span contenteditable=\"true\">Dinner</span>\n                                </td>\n                                <td contenteditable=\"true\" class=\"py-2 px-4\">Grilled fish with rice&nbsp;</td>\n                                <td contenteditable=\"true\" class=\"py-2 px-4\">100g grilled fish + 160-200g chicken&nbsp;</td>\n                                <td class=\"py-2 px-4 text-right font-medium\"><span contenteditable=\"true\" class=\"meal-cal\" oninput=\"calculateTotalCalories()\">350</span> kcal</td>\n                            </tr>\n                            <tr class=\"hover:bg-slate-50/80\">\n                                <td class=\"py-2 px-4 font-semibold text-brand-green flex items-center space-x-2\">\n                                    <span class=\"w-6 h-6 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center text-xs\"><i class=\"fa-solid fa-moon\"></i></span>\n                                    <span contenteditable=\"true\">Bedtime</span>\n                                </td>\n                                <td contenteditable=\"true\" class=\"py-2 px-4\">Warm Chamomile Tea</td>\n                                <td contenteditable=\"true\" class=\"py-2 px-4\">1 cup unsweetened herbal tea</td>\n                                <td class=\"py-2 px-4 text-right font-medium\"><span contenteditable=\"true\" class=\"meal-cal\" oninput=\"calculateTotalCalories()\">15</span> kcal</td>\n                            </tr>\n                        </tbody>\n                    </table>\n                </div>\n\n                <!-- Total Calories Summary Box -->\n                <div class=\"flex justify-end z-10 relative\">\n                    <div class=\"bg-emerald-100/70 border border-emerald-200/80 px-6 py-2.5 rounded-2xl flex items-center space-x-3 text-sm shadow-sm\">\n                        <i class=\"fa-solid fa-calculator text-emerald-700 text-lg\"></i>\n                        <span class=\"font-bold text-emerald-900 tracking-wider\">TOTAL CALORIES:</span>\n                        <span contenteditable=\"true\" id=\"total-calories-val\" class=\"font-bold text-emerald-800 text-base border-b border-dashed border-emerald-500 min-w-[50px] text-center\">1385</span>\n                        <span class=\"font-semibold text-emerald-800\">kcal</span>\n                    </div>\n                </div>\n\n                <!-- Footer -->\n                <div class=\"border-t border-slate-200/80 pt-3 flex items-center justify-between text-xs text-slate-500 z-10 relative\">\n                    <div class=\"flex items-center space-x-2\">\n                        <div class=\"w-6 h-6 rounded-full bg-pink-100 text-brand-pink flex items-center justify-center text-xs\">\n                            <i class=\"fa-solid fa-heart-pulse\"></i>\n                        </div>\n                        <div>\n                            <span contenteditable=\"true\" class=\"brand-tagline font-semibold text-slate-700 tracking-wider\">NOURISHING BODIES, ENRICHING LIVES</span>\n                        </div>\n                    </div>\n                    <div class=\"flex items-center space-x-6\">\n                        <span contenteditable=\"true\" class=\"brand-name-full font-medium\">Muneeba Munir</span>\n                        <span contenteditable=\"true\" class=\"brand-phone font-medium\">+92 315 5687486</span>\n                        <span contenteditable=\"true\" class=\"brand-insta font-medium\">muneeba_munir07</span>\n                    </div>\n                </div>\n            "}, {"slideNumber": 3, "htmlContent": "\n                <svg class=\"bg-leaf-1\" viewBox=\"0 0 200 200\" fill=\"none\"><path d=\"M100 0C150 50 180 120 180 200C100 200 20 150 0 100C30 30 70 0 100 0Z\" fill=\"#3d7042\"></path></svg>\n\n                <!-- Header -->\n                <div class=\"z-10 relative\">\n                    <div class=\"flex items-center space-x-2\">\n                        <h2 contenteditable=\"true\" class=\"font-heading font-extrabold text-3xl text-brand-green\">Meal Prep <span class=\"text-brand-pink\">Methods</span></h2>\n                        <i class=\"fa-solid fa-leaf text-brand-pink text-2xl\"></i>\n                    </div>\n                    <p contenteditable=\"true\" class=\"text-xs text-slate-500 mt-1\">Simple preparation methods to make healthy eating easier and more consistent.</p>\n                </div>\n\n                <!-- 6 Card Grid -->\n                <div class=\"grid grid-cols-3 gap-5 my-auto z-10 relative\">\n                    <div class=\"bg-white p-5 rounded-2xl shadow-sm border border-slate-100 border-b-4 border-b-emerald-400 flex flex-col items-center text-center space-y-2\">\n                        <div class=\"w-12 h-12 rounded-full bg-emerald-100/70 text-emerald-600 flex items-center justify-center text-xl mb-1\">\n                            <i class=\"fa-solid fa-leaf\"></i>\n                        </div>\n                        <h3 contenteditable=\"true\" class=\"font-bold text-slate-800 text-sm\">Wash &amp; Prep</h3>\n                        <p contenteditable=\"true\" class=\"text-xs text-slate-500 leading-relaxed\">Wash, dry and portion vegetables, fruits and salad ingredients in advance.</p>\n                    </div>\n\n                    <div class=\"bg-white p-5 rounded-2xl shadow-sm border border-slate-100 border-b-4 border-b-pink-400 flex flex-col items-center text-center space-y-2\">\n                        <div class=\"w-12 h-12 rounded-full bg-pink-100/70 text-pink-600 flex items-center justify-center text-xl mb-1\">\n                            <i class=\"fa-solid fa-fire-burner\"></i>\n                        </div>\n                        <h3 contenteditable=\"true\" class=\"font-bold text-brand-pink text-sm\">Batch Cooking</h3>\n                        <p contenteditable=\"true\" class=\"text-xs text-slate-500 leading-relaxed\">Prepare protein and staple foods in batches for 2–3 days when suitable.</p>\n                    </div>\n\n                    <div class=\"bg-white p-5 rounded-2xl shadow-sm border border-slate-100 border-b-4 border-b-amber-400 flex flex-col items-center text-center space-y-2\">\n                        <div class=\"w-12 h-12 rounded-full bg-amber-100/70 text-amber-600 flex items-center justify-center text-xl mb-1\">\n                            <i class=\"fa-solid fa-kitchen-set\"></i>\n                        </div>\n                        <h3 contenteditable=\"true\" class=\"font-bold text-amber-600 text-sm\">Healthy Cooking</h3>\n                        <p contenteditable=\"true\" class=\"text-xs text-slate-500 leading-relaxed\">Prefer baking, grilling, steaming, roasting, boiling or air-frying over deep-frying.</p>\n                    </div>\n\n                    <div class=\"bg-white p-5 rounded-2xl shadow-sm border border-slate-100 border-b-4 border-b-blue-400 flex flex-col items-center text-center space-y-2\">\n                        <div class=\"w-12 h-12 rounded-full bg-blue-100/70 text-blue-600 flex items-center justify-center text-xl mb-1\">\n                            <i class=\"fa-solid fa-scale-balanced\"></i>\n                        </div>\n                        <h3 contenteditable=\"true\" class=\"font-bold text-blue-600 text-sm\">Portion Control</h3>\n                        <p contenteditable=\"true\" class=\"text-xs text-slate-500 leading-relaxed\">Pre-portion meals and snacks using cups, spoons or a kitchen scale.</p>\n                    </div>\n\n                    <div class=\"bg-white p-5 rounded-2xl shadow-sm border border-slate-100 border-b-4 border-b-teal-400 flex flex-col items-center text-center space-y-2\">\n                        <div class=\"w-12 h-12 rounded-full bg-teal-100/70 text-teal-600 flex items-center justify-center text-xl mb-1\">\n                            <i class=\"fa-solid fa-box-archive\"></i>\n                        </div>\n                        <h3 contenteditable=\"true\" class=\"font-bold text-teal-600 text-sm\">Safe Storage</h3>\n                        <p contenteditable=\"true\" class=\"text-xs text-slate-500 leading-relaxed\">Cool cooked foods properly and store them safely in clean, covered containers.</p>\n                    </div>\n\n                    <div class=\"bg-white p-5 rounded-2xl shadow-sm border border-slate-100 border-b-4 border-b-purple-400 flex flex-col items-center text-center space-y-2\">\n                        <div class=\"w-12 h-12 rounded-full bg-purple-100/70 text-purple-600 flex items-center justify-center text-xl mb-1\">\n                            <i class=\"fa-solid fa-clipboard-list\"></i>\n                        </div>\n                        <h3 contenteditable=\"true\" class=\"font-bold text-brand-purple text-sm\">Plan Ahead</h3>\n                        <p contenteditable=\"true\" class=\"text-xs text-slate-500 leading-relaxed\">Prepare a shopping list and choose meals for the next day before bedtime.</p>\n                    </div>\n                </div>\n\n                <!-- Footer -->\n                <div class=\"border-t border-slate-200/80 pt-3 flex items-center justify-between text-xs text-slate-500 z-10 relative\">\n                    <div class=\"flex items-center space-x-2\">\n                        <div class=\"w-6 h-6 rounded-full bg-pink-100 text-brand-pink flex items-center justify-center text-xs\">\n                            <i class=\"fa-solid fa-heart-pulse\"></i>\n                        </div>\n                        <div>\n                            <span contenteditable=\"true\" class=\"brand-tagline font-semibold text-slate-700 tracking-wider\">NOURISHING BODIES, ENRICHING LIVES</span>\n                        </div>\n                    </div>\n                    <div class=\"flex items-center space-x-6\">\n                        <span contenteditable=\"true\" class=\"brand-name-full font-medium\">Muneeba Munir</span>\n                        <span contenteditable=\"true\" class=\"brand-phone font-medium\">+92 315 5687486</span>\n                        <span contenteditable=\"true\" class=\"brand-insta font-medium\">muneeba_munir07</span>\n                    </div>\n                </div>\n            "}, {"slideNumber": 4, "htmlContent": "\n<svg class=\"bg-leaf-1\" fill=\"none\" viewbox=\"0 0 200 200\"><path d=\"M100 0C150 50 180 120 180 200C100 200 20 150 0 100C30 30 70 0 100 0Z\" fill=\"#3d7042\"></path></svg>\n<div class=\"flex items-center space-x-3 z-10 relative\">\n<div class=\"w-12 h-12 rounded-2xl bg-gradient-to-br from-pink-400 to-rose-500 text-white flex items-center justify-center text-2xl shadow\">\n<i class=\"fa-solid fa-utensils\"></i>\n</div>\n<div>\n<h2 class=\"font-heading font-extrabold text-2xl text-brand-green tracking-tight\" contenteditable=\"true\">Recipe <span class=\"text-brand-pink\">CARD #1</span></h2>\n</div>\n</div>\n<div class=\"bg-white rounded-2xl shadow-sm border border-slate-100 grid grid-cols-2 text-xs z-10 relative recipe-info-box p-2.5 my-1.5 gap-2\">\n<div class=\"border-r border-slate-100 space-y-1\">\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-book-open text-pink-500 mr-1.5\"></i> Recipe Name:</span>\n<span class=\"font-bold text-slate-800 border-b border-dashed border-slate-300\" contenteditable=\"true\">Masala Oats with Egg </span>\n</div>\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-users text-emerald-500 mr-1.5\"></i> Servings:</span>\n<span class=\"font-semibold text-slate-800 border-b border-dashed border-slate-300\" contenteditable=\"true\">1 Servings</span>\n</div>\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-regular fa-clock text-amber-500 mr-1.5\"></i> Prep Time:</span>\n<span class=\"font-semibold text-slate-800 border-b border-dashed border-slate-300\" contenteditable=\"true\">5 mins</span>\n</div>\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-fire-burner text-purple-500 mr-1.5\"></i> Cooking Time:</span>\n<span class=\"font-semibold text-slate-800 border-b border-dashed border-slate-300\" contenteditable=\"true\">12-15 mins</span>\n</div>\n</div>\n<div class=\"space-y-1\">\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-bolt text-amber-500 mr-1.5\"></i> Calories/Serving:</span>\n<span class=\"font-bold text-slate-800\"><span contenteditable=\"true\">280</span> kcal</span>\n</div>\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-drumstick-bite text-pink-500 mr-1.5\"></i> Protein:</span>\n<span class=\"font-semibold text-slate-800\"><span contenteditable=\"true\">14</span> g</span>\n</div>\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-wheat-awn text-emerald-500 mr-1.5\"></i> Carbohydrates:</span>\n<span class=\"font-semibold text-slate-800\"><span contenteditable=\"true\">30</span> g</span>\n</div>\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-droplet text-amber-500 mr-1.5\"></i> Fat:</span>\n<span class=\"font-semibold text-slate-800\"><span contenteditable=\"true\">9</span> g</span>\n</div>\n</div>\n</div>\n<div class=\"grid grid-cols-12 gap-4 my-auto z-10 relative\">\n<div class=\"col-span-5 bg-white p-3.5 rounded-2xl shadow-sm border border-slate-100 flex flex-col\">\n<div class=\"bg-brand-lightgreen text-brand-green px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-2 mb-2\">\n<i class=\"fa-solid fa-leaf\"></i> INGREDIENTS\n                        </div>\n<ul class=\"text-xs text-slate-700 space-y-1.5 pl-2 list-disc list-inside leading-snug\" contenteditable=\"true\">\n<li><span style=\"font-size: 0.75rem;\">2 tbsp oats</span></li><li>1 egg</li><li>½ cup mixed vegetables</li><li>½ cup water</li><li>1 tsp oil</li><li>¼ tsp cumin</li><li>¼ tsp black pepper</li><li>Pinch of salt</li><li>Coriander</li>\n</ul>\n</div>\n<div class=\"col-span-7 bg-white p-3.5 rounded-2xl shadow-sm border border-slate-100 flex flex-col\">\n<div class=\"bg-brand-lightpink text-brand-pink px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-2 mb-2\">\n<i class=\"fa-solid fa-list-ol\"></i> METHOD\n                        </div>\n<ol class=\"text-xs text-slate-700 space-y-1.5 pl-2 list-decimal list-inside leading-snug\" contenteditable=\"true\">\n<li>Heat oil in a pan and add cumin.</li><li>Add chopped vegetables and sauté for 2–3 minutes.</li><li>Add oats and water.</li><li>Cook until oats become soft.</li><li>Season with black pepper, salt and coriander.</li><li>Boil the egg and serve on it.</li>\n</ol>\n</div>\n</div>\n<div class=\"grid grid-cols-3 gap-3 z-10 relative\">\n<div class=\"bg-brand-lightpurple p-3 rounded-2xl border border-purple-100 text-xs\">\n<span class=\"font-bold text-brand-purple block mb-1\"><i class=\"fa-solid fa-weight-hanging mr-1\"></i> PORTION SIZE</span>\n<div class=\"text-slate-700\" contenteditable=\"true\">1 serving = 1 bowl </div>\n</div>\n<div class=\"bg-brand-lightblue p-3 rounded-2xl border border-blue-100 text-xs\">\n<span class=\"font-bold text-brand-blue block mb-1\"><i class=\"fa-solid fa-box-archive mr-1\"></i> MEAL PREP &amp; STORAGE</span>\n<div class=\"text-slate-700\" contenteditable=\"true\">Best eaten fresh. Vegetables can be chopped beforehand.</div>\n</div>\n<div class=\"bg-brand-lightyellow p-3 rounded-2xl border border-amber-100 text-xs\">\n<span class=\"font-bold text-brand-yellow block mb-1\"><i class=\"fa-solid fa-lightbulb mr-1\"></i> NUTRITION TIP</span>\n<div class=\"text-slate-700 italic\" contenteditable=\"true\">\"Adding egg makes the oats more filling and increases protein.</div>\n</div>\n</div>\n\n"}, {"slideNumber": 5, "htmlContent": "\n<svg class=\"bg-leaf-1\" fill=\"none\" viewbox=\"0 0 200 200\"><path d=\"M100 0C150 50 180 120 180 200C100 200 20 150 0 100C30 30 70 0 100 0Z\" fill=\"#3d7042\"></path></svg>\n<div class=\"flex items-center space-x-3 z-10 relative\">\n<div class=\"w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center text-2xl shadow\">\n<i class=\"fa-solid fa-seedling\"></i>\n</div>\n<div>\n<h2 class=\"font-heading font-extrabold text-2xl text-brand-green tracking-tight\" contenteditable=\"true\">Recipe <span class=\"text-brand-pink\">CARD #2</span></h2>\n</div>\n</div>\n<div class=\"bg-white rounded-2xl shadow-sm border border-slate-100 grid grid-cols-2 text-xs z-10 relative recipe-info-box p-2.5 my-1.5 gap-2\">\n<div class=\"border-r border-slate-100 space-y-1\">\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-book-open text-pink-500 mr-1.5\"></i> Recipe Name:</span>\n<span class=\"font-bold text-slate-800 border-b border-dashed border-slate-300\" contenteditable=\"true\">Chicken Chapati Wrap</span>\n</div>\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-users text-emerald-500 mr-1.5\"></i> Servings:</span>\n<span class=\"font-semibold text-slate-800 border-b border-dashed border-slate-300\" contenteditable=\"true\">1 Serving</span>\n</div>\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-regular fa-clock text-amber-500 mr-1.5\"></i> Prep Time:</span>\n<span class=\"font-semibold text-slate-800 border-b border-dashed border-slate-300\" contenteditable=\"true\">10 mins</span>\n</div>\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-fire-burner text-purple-500 mr-1.5\"></i> Cooking Time:</span>\n<span class=\"font-semibold text-slate-800 border-b border-dashed border-slate-300\" contenteditable=\"true\">10-12 mins</span>\n</div>\n</div>\n<div class=\"space-y-1\">\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-bolt text-amber-500 mr-1.5\"></i> Calories/Serving:</span>\n<span class=\"font-bold text-slate-800\"><span contenteditable=\"true\">300</span> kcal</span>\n</div>\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-drumstick-bite text-pink-500 mr-1.5\"></i> Protein:</span>\n<span class=\"font-semibold text-slate-800\"><span contenteditable=\"true\">22</span> g</span>\n</div>\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-wheat-awn text-emerald-500 mr-1.5\"></i> Carbohydrates:</span>\n<span class=\"font-semibold text-slate-800\"><span contenteditable=\"true\">30</span> g</span>\n</div>\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-droplet text-amber-500 mr-1.5\"></i> Fat:</span>\n<span class=\"font-semibold text-slate-800\"><span contenteditable=\"true\">10</span> g</span>\n</div>\n</div>\n</div>\n<div class=\"grid grid-cols-12 gap-4 my-auto z-10 relative\">\n<div class=\"col-span-5 bg-white p-3.5 rounded-2xl shadow-sm border border-slate-100 flex flex-col\">\n<div class=\"bg-brand-lightgreen text-brand-green px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-2 mb-2\">\n<i class=\"fa-solid fa-leaf\"></i> INGREDIENTS\n                        </div>\n<ul class=\"text-xs text-slate-700 space-y-1.5 pl-2 list-disc list-inside leading-snug\" contenteditable=\"true\">\n<li><span style=\"font-size: 0.75rem;\">60 g cooked chicken breast, shredded</span></li><li>2 small chapati</li><li>½ cup vege (cucumber,sliced &amp; tomato, chopped)</li><li>1 tbsp low-fat yogurt</li><li>1 tsp oil</li><li>1 tsp lemon juice</li><li>¼ tsp black pepper</li><li>Pinch of salt</li><li>Coriander/mint</li>\n</ul>\n</div>\n<div class=\"col-span-7 bg-white p-3.5 rounded-2xl shadow-sm border border-slate-100 flex flex-col\">\n<div class=\"bg-brand-lightpink text-brand-pink px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-2 mb-2\">\n<i class=\"fa-solid fa-list-ol\"></i> METHOD\n                        </div>\n<ol class=\"text-xs text-slate-700 space-y-1.5 pl-2 list-decimal list-inside leading-snug\" contenteditable=\"true\">\n<li>Marinate chicken with lemon juice, black pepper and a little salt.</li><li>Cook chicken in 1 tsp oil until completely cooked.</li><li>Mix yogurt with mint/coriander to make a light sauce.</li><li>Place chapati on a flat surface.</li><li>Add chicken, cucumber, tomato and lettuce.</li><li>Drizzle with yogurt sauce and roll tightly.</li><li>Cut into two halves and serve.</li>\n</ol>\n</div>\n</div>\n<div class=\"grid grid-cols-3 gap-3 z-10 relative\">\n<div class=\"bg-brand-lightpurple p-3 rounded-2xl border border-purple-100 text-xs\">\n<span class=\"font-bold text-brand-purple block mb-1\"><i class=\"fa-solid fa-weight-hanging mr-1\"></i> PORTION SIZE</span>\n<div class=\"text-slate-700\" contenteditable=\"true\">2  wraps </div>\n</div>\n<div class=\"bg-brand-lightblue p-3 rounded-2xl border border-blue-100 text-xs\">\n<span class=\"font-bold text-brand-blue block mb-1\"><i class=\"fa-solid fa-box-archive mr-1\"></i> MEAL PREP &amp; STORAGE</span>\n<div class=\"text-slate-700\" contenteditable=\"true\">Prepare the chicken in advance and refrigerate for up to 3 days. Assemble the wrap just before eating so the chapati doesn't become soggy.</div>\n</div>\n<div class=\"bg-brand-lightyellow p-3 rounded-2xl border border-amber-100 text-xs\">\n<span class=\"font-bold text-brand-yellow block mb-1\"><i class=\"fa-solid fa-lightbulb mr-1\"></i> NUTRITION TIP</span>\n<div class=\"text-slate-700 italic\" contenteditable=\"true\">\"Use grilled chicken and low-fat yogurt to keep protein high while controlling added fat.</div>\n</div>\n</div>\n\n"}, {"slideNumber": 6, "htmlContent": "\n<svg class=\"bg-leaf-1\" fill=\"none\" viewbox=\"0 0 200 200\"><path d=\"M100 0C150 50 180 120 180 200C100 200 20 150 0 100C30 30 70 0 100 0Z\" fill=\"#3d7042\"></path></svg>\n<div class=\"flex items-center space-x-3 z-10 relative\">\n<div class=\"w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 text-white flex items-center justify-center text-2xl shadow\">\n<i class=\"fa-solid fa-fish text-white\"></i>\n</div>\n<div>\n<h2 class=\"font-heading font-extrabold text-2xl text-brand-green tracking-tight\" contenteditable=\"true\">Recipe <span class=\"text-brand-pink\">CARD #3</span></h2>\n</div>\n</div>\n<div class=\"bg-white rounded-2xl shadow-sm border border-slate-100 grid grid-cols-2 text-xs z-10 relative recipe-info-box p-2.5 my-1.5 gap-2\">\n<div class=\"border-r border-slate-100 space-y-1\">\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-book-open text-pink-500 mr-1.5\"></i> Recipe Name:</span>\n<span class=\"font-bold text-slate-800 border-b border-dashed border-slate-300\" contenteditable=\"true\">Grilled Fish with Boiled Rice</span>\n</div>\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-users text-emerald-500 mr-1.5\"></i> Servings:</span>\n<span class=\"font-semibold text-slate-800 border-b border-dashed border-slate-300\" contenteditable=\"true\">1 Servings</span>\n</div>\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-regular fa-clock text-amber-500 mr-1.5\"></i> Prep Time:</span>\n<span class=\"font-semibold text-slate-800 border-b border-dashed border-slate-300\" contenteditable=\"true\">10 mins</span>\n</div>\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-fire-burner text-purple-500 mr-1.5\"></i> Cooking Time:</span>\n<span class=\"font-semibold text-slate-800 border-b border-dashed border-slate-300\" contenteditable=\"true\">15-20 mins</span>\n</div>\n</div>\n<div class=\"space-y-1\">\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-bolt text-amber-500 mr-1.5\"></i> Calories/Serving:</span>\n<span class=\"font-bold text-slate-800\"><span contenteditable=\"true\">350</span> kcal</span>\n</div>\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-drumstick-bite text-pink-500 mr-1.5\"></i> Protein:</span>\n<span class=\"font-semibold text-slate-800\"><span contenteditable=\"true\">25</span> g</span>\n</div>\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-wheat-awn text-emerald-500 mr-1.5\"></i> Carbohydrates:</span>\n<span class=\"font-semibold text-slate-800\"><span contenteditable=\"true\">40</span> g</span>\n</div>\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-droplet text-amber-500 mr-1.5\"></i> Fat:</span>\n<span class=\"font-semibold text-slate-800\"><span contenteditable=\"true\">8</span> g</span>\n</div>\n</div>\n</div>\n<div class=\"grid grid-cols-12 gap-4 my-auto z-10 relative\">\n<div class=\"col-span-5 bg-white p-3.5 rounded-2xl shadow-sm border border-slate-100 flex flex-col\">\n<div class=\"bg-brand-lightgreen text-brand-green px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-2 mb-2\">\n<i class=\"fa-solid fa-leaf\"></i> INGREDIENTS\n                        </div>\n<ul class=\"text-xs text-slate-700 space-y-1.5 pl-2 list-disc list-inside leading-snug\" contenteditable=\"true\">\n<li>100 g fish fillet (such as rohu or other lean fish)</li><li>160-200g cooked boiled rice</li><li>1 tsp oil</li><li>1 tsp lemon juice</li><li>¼ tsp garlic powder</li><li>¼ tsp black pepper</li><li>¼ tsp dried oregano</li><li>Pinch of salt</li><li>Fresh coriander, for garnish</li>\n</ul>\n</div>\n<div class=\"col-span-7 bg-white p-3.5 rounded-2xl shadow-sm border border-slate-100 flex flex-col\">\n<div class=\"bg-brand-lightpink text-brand-pink px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-2 mb-2\">\n<i class=\"fa-solid fa-list-ol\"></i> METHOD\n                        </div>\n<ol class=\"text-xs text-slate-700 space-y-1.5 pl-2 list-decimal list-inside leading-snug\" contenteditable=\"true\">\n<li>Clean the fish and pat it dry.</li><li>Marinate with lemon juice, garlic powder, black pepper, oregano and a small amount of salt.</li><li>Leave for 5–10 minutes.</li><li>Heat a non-stick grill pan and add 1 tsp oil.</li><li>Grill the fish for about 4–6 minutes on each side, or until completely cooked and flaky.</li><li>Serve with 160-200g boiled rice.</li><li>Garnish with fresh coriander and a little lemon juice.</li>\n</ol>\n</div>\n</div>\n<div class=\"grid grid-cols-3 gap-3 z-10 relative\">\n<div class=\"bg-brand-lightpurple p-3 rounded-2xl border border-purple-100 text-xs\">\n<span class=\"font-bold text-brand-purple block mb-1\"><i class=\"fa-solid fa-weight-hanging mr-1\"></i> PORTION SIZE</span>\n<div class=\"text-slate-700\" contenteditable=\"true\">1 serving = 1 fillet + 160-200g cooked rice </div>\n</div>\n<div class=\"bg-brand-lightblue p-3 rounded-2xl border border-blue-100 text-xs\">\n<span class=\"font-bold text-brand-blue block mb-1\"><i class=\"fa-solid fa-box-archive mr-1\"></i> MEAL PREP &amp; STORAGE</span>\n<div class=\"text-slate-700\" contenteditable=\"true\">Cooked fish and rice can be refrigerated separately and used within 1–2 days. Reheat thoroughly before serving.</div>\n</div>\n<div class=\"bg-brand-lightyellow p-3 rounded-2xl border border-amber-100 text-xs\">\n<span class=\"font-bold text-brand-yellow block mb-1\"><i class=\"fa-solid fa-lightbulb mr-1\"></i> NUTRITION TIP</span>\n<div class=\"text-slate-700 italic\" contenteditable=\"true\">\"Choose a lean fish and keep the oil measured. Boiled rice provides carbohydrate while fish provides high-quality protein.</div>\n</div>\n</div>\n\n"}, {"slideNumber": 7, "htmlContent": "\n<svg class=\"bg-leaf-1\" fill=\"none\" viewbox=\"0 0 200 200\"><path d=\"M100 0C150 50 180 120 180 200C100 200 20 150 0 100C30 30 70 0 100 0Z\" fill=\"#3d7042\"></path></svg>\n<div class=\"flex items-center space-x-3 z-10 relative\">\n<div class=\"w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-400 to-indigo-600 text-white flex items-center justify-center text-2xl shadow\">\n<i class=\"fa-solid fa-spoon\"></i>\n</div>\n<div>\n<h2 class=\"font-heading font-extrabold text-2xl text-brand-green tracking-tight\" contenteditable=\"true\">Recipe <span class=\"text-brand-pink\">CARD #4</span></h2>\n</div>\n</div>\n<div class=\"bg-white rounded-2xl shadow-sm border border-slate-100 grid grid-cols-2 text-xs z-10 relative recipe-info-box p-2.5 my-1.5 gap-2\">\n<div class=\"border-r border-slate-100 space-y-1\">\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-book-open text-pink-500 mr-1.5\"></i> Recipe Name:</span>\n<span class=\"font-bold text-slate-800 border-b border-dashed border-slate-300\" contenteditable=\"true\">Greek Yogurt &amp; Berry Layered Parfait</span>\n</div>\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-users text-emerald-500 mr-1.5\"></i> Servings:</span>\n<span class=\"font-semibold text-slate-800 border-b border-dashed border-slate-300\" contenteditable=\"true\">1 Serving</span>\n</div>\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-regular fa-clock text-amber-500 mr-1.5\"></i> Prep Time:</span>\n<span class=\"font-semibold text-slate-800 border-b border-dashed border-slate-300\" contenteditable=\"true\">5 mins</span>\n</div>\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-fire-burner text-purple-500 mr-1.5\"></i> Cooking Time:</span>\n<span class=\"font-semibold text-slate-800 border-b border-dashed border-slate-300\" contenteditable=\"true\">0 mins (No-Cook)</span>\n</div>\n</div>\n<div class=\"space-y-1\">\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-bolt text-amber-500 mr-1.5\"></i> Calories/Serving:</span>\n<span class=\"font-bold text-slate-800\"><span contenteditable=\"true\">240</span> kcal</span>\n</div>\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-drumstick-bite text-pink-500 mr-1.5\"></i> Protein:</span>\n<span class=\"font-semibold text-slate-800\"><span contenteditable=\"true\">22</span> g</span>\n</div>\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-wheat-awn text-emerald-500 mr-1.5\"></i> Carbohydrates:</span>\n<span class=\"font-semibold text-slate-800\"><span contenteditable=\"true\">26</span> g</span>\n</div>\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-droplet text-amber-500 mr-1.5\"></i> Fat:</span>\n<span class=\"font-semibold text-slate-800\"><span contenteditable=\"true\">4</span> g</span>\n</div>\n</div>\n</div>\n<div class=\"grid grid-cols-12 gap-4 my-auto z-10 relative\">\n<div class=\"col-span-5 bg-white p-3.5 rounded-2xl shadow-sm border border-slate-100 flex flex-col\">\n<div class=\"bg-brand-lightgreen text-brand-green px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-2 mb-2\">\n<i class=\"fa-solid fa-leaf\"></i> INGREDIENTS\n                        </div>\n<ul class=\"text-xs text-slate-700 space-y-1.5 pl-2 list-disc list-inside leading-snug\" contenteditable=\"true\">\n<li>1 cup Plain non-fat Greek yogurt</li>\n<li>1/2 cup Mixed berries (strawberries/blueberries)</li>\n<li>2 tbsp Whole oats or low-sugar granola</li>\n<li>1 tsp Honey or pure maple syrup</li>\n<li>1 tsp Flaxseeds or chia seeds</li>\n</ul>\n</div>\n<div class=\"col-span-7 bg-white p-3.5 rounded-2xl shadow-sm border border-slate-100 flex flex-col\">\n<div class=\"bg-brand-lightpink text-brand-pink px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-2 mb-2\">\n<i class=\"fa-solid fa-list-ol\"></i> METHOD\n                        </div>\n<ol class=\"text-xs text-slate-700 space-y-1.5 pl-2 list-decimal list-inside leading-snug\" contenteditable=\"true\">\n<li>Spoon half of the Greek yogurt into a glass jar or dessert cup.</li>\n<li>Add a layer of mixed berries and 1 tbsp of oats/granola.</li>\n<li>Add remaining Greek yogurt on top.</li>\n<li>Finish with remaining berries, seeds, and a light drizzle of honey.</li>\n<li>Serve chilled immediately or store in fridge for breakfast.</li>\n</ol>\n</div>\n</div>\n<div class=\"grid grid-cols-3 gap-3 z-10 relative\">\n<div class=\"bg-brand-lightpurple p-3 rounded-2xl border border-purple-100 text-xs\">\n<span class=\"font-bold text-brand-purple block mb-1\"><i class=\"fa-solid fa-weight-hanging mr-1\"></i> PORTION SIZE</span>\n<div class=\"text-slate-700\" contenteditable=\"true\">1 serving = 1 jar (~250g)</div>\n</div>\n<div class=\"bg-brand-lightblue p-3 rounded-2xl border border-blue-100 text-xs\">\n<span class=\"font-bold text-brand-blue block mb-1\"><i class=\"fa-solid fa-box-archive mr-1\"></i> MEAL PREP &amp; STORAGE</span>\n<div class=\"text-slate-700\" contenteditable=\"true\">Can be prepped in mason jars for up to 2 days. Keep granola separate until eating.</div>\n</div>\n<div class=\"bg-brand-lightyellow p-3 rounded-2xl border border-amber-100 text-xs\">\n<span class=\"font-bold text-brand-yellow block mb-1\"><i class=\"fa-solid fa-lightbulb mr-1\"></i> NUTRITION TIP</span>\n<div class=\"text-slate-700 italic\" contenteditable=\"true\">\"Greek yogurt packs twice the protein of regular yogurt plus live gut probiotics!\"</div>\n</div>\n</div>\n\n"}, {"slideNumber": 8, "htmlContent": "\n<svg class=\"bg-leaf-1\" fill=\"none\" viewbox=\"0 0 200 200\"><path d=\"M100 0C150 50 180 120 180 200C100 200 20 150 0 100C30 30 70 0 100 0Z\" fill=\"#3d7042\"></path></svg>\n<div class=\"flex items-center space-x-3 z-10 relative\">\n<div class=\"w-12 h-12 rounded-2xl bg-gradient-to-br from-yellow-500 to-amber-600 text-white flex items-center justify-center text-2xl shadow\">\n<i class=\"fa-solid fa-mug-hot\"></i>\n</div>\n<div>\n<h2 class=\"font-heading font-extrabold text-2xl text-brand-green tracking-tight\" contenteditable=\"true\">Recipe <span class=\"text-brand-pink\">CARD #5</span></h2>\n</div>\n</div>\n<div class=\"bg-white rounded-2xl shadow-sm border border-slate-100 grid grid-cols-2 text-xs z-10 relative recipe-info-box p-2.5 my-1.5 gap-2\">\n<div class=\"border-r border-slate-100 space-y-1\">\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-book-open text-pink-500 mr-1.5\"></i> Recipe Name:</span>\n<span class=\"font-bold text-slate-800 border-b border-dashed border-slate-300\" contenteditable=\"true\">Creamy Chicken Vegetable Pasta</span>\n</div>\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-users text-emerald-500 mr-1.5\"></i> Servings:</span>\n<span class=\"font-semibold text-slate-800 border-b border-dashed border-slate-300\" contenteditable=\"true\">1 Servings</span>\n</div>\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-regular fa-clock text-amber-500 mr-1.5\"></i> Prep Time:</span>\n<span class=\"font-semibold text-slate-800 border-b border-dashed border-slate-300\" contenteditable=\"true\">10 mins</span>\n</div>\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-fire-burner text-purple-500 mr-1.5\"></i> Cooking Time:</span>\n<span class=\"font-semibold text-slate-800 border-b border-dashed border-slate-300\" contenteditable=\"true\">12-15 mins</span>\n</div>\n</div>\n<div class=\"space-y-1\">\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-bolt text-amber-500 mr-1.5\"></i> Calories/Serving:</span>\n<span class=\"font-bold text-slate-800\"><span contenteditable=\"true\">335</span> kcal</span>\n</div>\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-drumstick-bite text-pink-500 mr-1.5\"></i> Protein:</span>\n<span class=\"font-semibold text-slate-800\"><span contenteditable=\"true\">25</span> g</span>\n</div>\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-wheat-awn text-emerald-500 mr-1.5\"></i> Carbohydrates:</span>\n<span class=\"font-semibold text-slate-800\"><span contenteditable=\"true\">38</span> g</span>\n</div>\n<div class=\"flex items-center justify-between\">\n<span class=\"text-slate-500 font-medium\"><i class=\"fa-solid fa-droplet text-amber-500 mr-1.5\"></i> Fat:</span>\n<span class=\"font-semibold text-slate-800\"><span contenteditable=\"true\">10</span> g</span>\n</div>\n</div>\n</div>\n<div class=\"grid grid-cols-12 gap-4 my-auto z-10 relative\">\n<div class=\"col-span-5 bg-white p-3.5 rounded-2xl shadow-sm border border-slate-100 flex flex-col\">\n<div class=\"bg-brand-lightgreen text-brand-green px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-2 mb-2\">\n<i class=\"fa-solid fa-leaf\"></i> INGREDIENTS\n                        </div>\n<ul class=\"text-xs text-slate-700 space-y-1.5 pl-2 list-disc list-inside leading-snug\" contenteditable=\"true\">\n<li><span style=\"font-size: 0.75rem;\">⅔ cup cooked pasta</span></li><li>60 g cooked chicken breast, shredded</li><li>½ cup mixed vegetables — capsicum, carrot and tomato</li><li>1 tbsp low-fat cooking cream</li><li>1 tsp oil</li><li>½ tsp garlic, minced</li><li>¼ tsp black pepper</li><li>Pinch of salt</li><li>1 tsp lemon juice</li><li>1 tbsp coriander/parsley</li>\n</ul>\n</div>\n<div class=\"col-span-7 bg-white p-3.5 rounded-2xl shadow-sm border border-slate-100 flex flex-col\">\n<div class=\"bg-brand-lightpink text-brand-pink px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-2 mb-2\">\n<i class=\"fa-solid fa-list-ol\"></i> METHOD\n                        </div>\n<ol class=\"text-xs text-slate-700 space-y-1.5 pl-2 list-decimal list-inside leading-snug\" contenteditable=\"true\">\n<li>Boil pasta until tender and drain.</li><li>Heat 1 tsp oil in a non-stick pan.</li><li>Add garlic and mixed vegetables; sauté for 2–3 minutes.</li><li>Add shredded chicken and cook for another 2 minutes.</li><li>Reduce the heat and add 1 tbsp low-fat cream.</li><li>Add black pepper and a little salt. Mix gently.</li><li>Add cooked pasta and toss everything together.</li><li>Add lemon juice and coriander/parsley.</li><li>Serve warm.</li>\n</ol>\n</div>\n</div>\n<div class=\"grid grid-cols-3 gap-3 z-10 relative\">\n<div class=\"bg-brand-lightpurple p-3 rounded-2xl border border-purple-100 text-xs\">\n<span class=\"font-bold text-brand-purple block mb-1\"><i class=\"fa-solid fa-weight-hanging mr-1\"></i> PORTION SIZE</span>\n<div class=\"text-slate-700\" contenteditable=\"true\">1 serving = 1 bowl </div>\n</div>\n<div class=\"bg-brand-lightblue p-3 rounded-2xl border border-blue-100 text-xs\">\n<span class=\"font-bold text-brand-blue block mb-1\"><i class=\"fa-solid fa-box-archive mr-1\"></i> MEAL PREP &amp; STORAGE</span>\n<div class=\"text-slate-700\" contenteditable=\"true\">Prepare the chicken and vegetables in advance and refrigerate for up to 3 days. Add the cream when preparing the pasta for serving.</div>\n</div>\n<div class=\"bg-brand-lightyellow p-3 rounded-2xl border border-amber-100 text-xs\">\n<span class=\"font-bold text-brand-yellow block mb-1\"><i class=\"fa-solid fa-lightbulb mr-1\"></i> NUTRITION TIP</span>\n<div class=\"text-slate-700 italic\" contenteditable=\"true\">Keep the cream to 1 tbsp and use measured oil to control the fat and calories while still giving the pasta a creamy taste.</div>\n</div>\n</div>\n\n"}, {"slideNumber": 9, "htmlContent": "\n                <svg class=\"bg-leaf-1\" viewBox=\"0 0 200 200\" fill=\"none\"><path d=\"M100 0C150 50 180 120 180 200C100 200 20 150 0 100C30 30 70 0 100 0Z\" fill=\"#3d7042\"></path></svg>\n\n                <div class=\"z-10 relative\">\n                    <div class=\"flex items-center space-x-2\">\n                        <h2 contenteditable=\"true\" class=\"font-heading font-extrabold text-3xl text-brand-green\">Daily Guidance <span class=\"text-brand-pink\">&amp; Follow-Up</span></h2>\n                        <i class=\"fa-solid fa-clipboard-check text-brand-pink text-2xl\"></i>\n                    </div>\n                </div>\n\n                <div class=\"grid grid-cols-2 gap-6 my-auto z-10 relative\">\n                    <div class=\"bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between\">\n                        <div class=\"border-b border-slate-100 pb-2 mb-3 flex items-center space-x-2\">\n                            <span class=\"w-7 h-7 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs\"><i class=\"fa-solid fa-leaf\"></i></span>\n                            <h3 contenteditable=\"true\" class=\"font-bold text-slate-800 text-sm\">GENERAL NUTRITION GUIDELINES</h3>\n                        </div>\n\n                        <ul class=\"space-y-2.5 text-xs text-slate-700\">\n                            <li class=\"flex items-start space-x-2.5\">\n                                <span class=\"text-emerald-500 mt-0.5\"><i class=\"fa-solid fa-circle-check\"></i></span>\n                                <span contenteditable=\"true\">Eat balanced meals including all recommended food groups.</span>\n                            </li>\n                            <li class=\"flex items-start space-x-2.5\">\n                                <span class=\"text-emerald-500 mt-0.5\"><i class=\"fa-solid fa-circle-check\"></i></span>\n                                <span contenteditable=\"true\">Follow the prescribed portions and meal timings consistently.</span>\n                            </li>\n                            <li class=\"flex items-start space-x-2.5\">\n                                <span class=\"text-emerald-500 mt-0.5\"><i class=\"fa-solid fa-circle-check\"></i></span>\n                                <span contenteditable=\"true\">Include a wide variety of fresh fruits and colorful vegetables.</span>\n                            </li>\n                            <li class=\"flex items-start space-x-2.5\">\n                                <span class=\"text-emerald-500 mt-0.5\"><i class=\"fa-solid fa-circle-check\"></i></span>\n                                <span contenteditable=\"true\">Choose mostly whole, minimally processed ingredients.</span>\n                            </li>\n                            <li class=\"flex items-start space-x-2.5\">\n                                <span class=\"text-emerald-500 mt-0.5\"><i class=\"fa-solid fa-circle-check\"></i></span>\n                                <span contenteditable=\"true\">Stay hydrated: drink plenty of water throughout the entire day.</span>\n                            </li>\n                            <li class=\"flex items-start space-x-2.5\">\n                                <span class=\"text-emerald-500 mt-0.5\"><i class=\"fa-solid fa-circle-check\"></i></span>\n                                <span contenteditable=\"true\">Limit refined sugar, sugary drinks, and ultra-processed snacks.</span>\n                            </li>\n                            <li class=\"flex items-start space-x-2.5\">\n                                <span class=\"text-emerald-500 mt-0.5\"><i class=\"fa-solid fa-circle-check\"></i></span>\n                                <span contenteditable=\"true\">Follow the plan consistently and note questions for follow-up.</span>\n                            </li>\n                        </ul>\n                    </div>\n\n                    <div class=\"bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between\">\n                        <div>\n                            <div class=\"border-b border-slate-100 pb-2 mb-3 flex items-center space-x-2\">\n                                <span class=\"w-7 h-7 rounded-full bg-pink-100 text-brand-pink flex items-center justify-center text-xs\"><i class=\"fa-solid fa-droplet\"></i></span>\n                                <h3 contenteditable=\"true\" class=\"font-bold text-slate-800 text-sm\">WATER &amp; NOTES</h3>\n                            </div>\n\n                            <div class=\"bg-brand-lightpink p-3 rounded-xl border border-pink-100 flex items-center justify-between text-xs mb-4\">\n                                <span class=\"font-semibold text-brand-pink flex items-center gap-1.5\"><i class=\"fa-solid fa-glass-water\"></i> Daily Water Target:</span>\n                                <div class=\"font-bold text-slate-800\"><span contenteditable=\"true\" class=\"border-b border-dashed border-pink-400\">10-12</span> glasses / day</div>\n                            </div>\n\n                            <div class=\"space-y-2\">\n                                <label class=\"text-[11px] font-bold text-slate-400 uppercase tracking-wider block\">Dietitian Notes / Follow-Up Instructions</label>\n                                <div contenteditable=\"true\" class=\"text-xs text-slate-700 leading-relaxed border border-slate-200 rounded-xl p-3 bg-slate-50/50 min-h-[140px] focus:bg-white focus:border-brand-pink\">\n                                    • Schedule next follow-up appointment in 14 days.<br>\n                                    • Track daily energy levels and digestion in your logbook.<br>\n                                    • Feel free to message on Instagram for quick portion queries!\n                                </div>\n                            </div>\n                        </div>\n                    </div>\n                </div>\n\n                <div class=\"border-t border-slate-200/80 pt-3 flex items-center justify-between text-xs text-slate-500 z-10 relative\">\n                    <div class=\"flex items-center space-x-2\">\n                        <div class=\"w-6 h-6 rounded-full bg-pink-100 text-brand-pink flex items-center justify-center text-xs\"><i class=\"fa-solid fa-heart-pulse\"></i></div>\n                        <div><span contenteditable=\"true\" class=\"brand-tagline font-semibold text-slate-700 tracking-wider\">NOURISHING BODIES, ENRICHING LIVES</span></div>\n                    </div>\n                    <div class=\"flex items-center space-x-6\">\n                        <span contenteditable=\"true\" class=\"brand-name-full font-medium\">Muneeba Munir</span>\n                        <span contenteditable=\"true\" class=\"brand-phone font-medium\">+92 315 5687486</span>\n                        <span contenteditable=\"true\" class=\"brand-insta font-medium\">muneeba_munir07</span>\n                    </div>\n                </div>\n            "}];
+let activeSlideIndex = 1;
+
+window.addEventListener('DOMContentLoaded', () => {
+  bindJSONLoader();
+  renderProject(INITIAL_SLIDES, false);
+});
+
+function bindJSONLoader(){
+  const input=document.getElementById('jsonFileInput');
+  if(input) input.addEventListener('change', loadJSONFile);
+  const drop=document.getElementById('slidesWrapper');
+  if(drop){
+    ['dragover','dragenter'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault(); drop.classList.add('ring-2','ring-pink-400');}));
+    ['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault(); drop.classList.remove('ring-2','ring-pink-400');}));
+    drop.addEventListener('drop',e=>{const f=e.dataTransfer.files[0]; if(f) readJSONFile(f);});
+  }
+}
+function triggerLoadJSON(){document.getElementById('jsonFileInput')?.click();}
+function loadJSONFile(e){const f=e.target.files?.[0]; if(f) readJSONFile(f);}
+function readJSONFile(file){
+  const r=new FileReader();
+  r.onload=()=>{try{const d=JSON.parse(r.result); renderProject(d,true);}catch(err){console.error(err);alert('Invalid JSON file. Please use the 9-slide JSON export.');}};
+  r.readAsText(file);
+}
+function normalizeSlides(data){
+  if(Array.isArray(data)) return data.map((x,i)=>({slideNumber:i+1,htmlContent:x.htmlContent||x.html||'',title:x.title||''}));
+  if(Array.isArray(data.slides)) return data.slides.map((x,i)=>({slideNumber:i+1,htmlContent:x.htmlContent||x.html||'',title:x.title||''}));
+  throw new Error('No slides array found');
+}
+function inferTitle(html,n,fallback){
+  const t=document.createElement('div'); t.innerHTML=html;
+  const h=t.querySelector('h1,h2,h3');
+  if(h) return h.textContent.replace(/\s+/g,' ').trim();
+  return fallback || `Slide ${n}`;
+}
+function footerHTML(){
+ return `<div class="standard-footer border-t border-slate-200/80 pt-3 flex items-center justify-between text-xs text-slate-500 z-20 relative shrink-0 mt-3 bg-transparent">
+  <div class="flex items-center space-x-2"><div class="w-6 h-6 rounded-full bg-pink-100 text-brand-pink flex items-center justify-center text-xs"><i class="fa-solid fa-heart-pulse"></i></div><span contenteditable="true" class="brand-tagline font-semibold text-slate-700 tracking-wider">NOURISHING BODIES, ENRICHING LIVES</span></div>
+  <div class="flex items-center space-x-6"><span contenteditable="true" class="brand-name-full font-medium">Muneeba Munir</span><span contenteditable="true" class="brand-phone font-medium">+92 315 5687486</span><span contenteditable="true" class="brand-insta font-medium">muneeba_munir07</span></div>
+ </div>`;
+}
+function headerHTML(){
+ return `<div class="standard-header flex items-start justify-between z-20 relative shrink-0 mb-3">
+  <div><div class="flex items-baseline gap-2"><span contenteditable="true" class="brand-name font-heading font-extrabold text-2xl text-brand-green">Muneeba</span><span contenteditable="true" class="brand-name-last font-heading font-extrabold text-2xl text-brand-pink">Munir</span><i class="fa-solid fa-leaf text-brand-green text-sm ml-1"></i></div><p contenteditable="true" class="brand-title text-brand-pink font-semibold text-[10px] tracking-widest">DIETITIAN | BS HND</p></div>
+  <div class="text-right text-[10px] text-slate-500"><div contenteditable="true" class="brand-phone font-medium">+92 315 5687486</div><div contenteditable="true" class="brand-insta font-medium">muneeba_munir07</div></div>
+ </div>`;
+}
+function ensureStructure(slide){
+  // Remove generated headers/footers first so re-loading JSON never duplicates them.
+  slide.querySelectorAll('.standard-header,.standard-footer').forEach(e=>e.remove());
+
+  const n = Number(slide.dataset.pageNumber) || (Array.from(document.querySelectorAll('#slidesWrapper > .slide-canvas')).indexOf(slide) + 1);
+
+  // Recipe/detail slides 4-8: remove EVERY original footer block, including
+  // footers that came directly from the JSON and do not have .standard-footer.
+  if([4,5,6,7,8].includes(n)){
+    [...slide.children].forEach(el=>{
+      const hasBrandFooter = el.querySelector && el.querySelector('.brand-tagline');
+      const looksLikeFooter = /NOURISHING BODIES|NOURISHING BODIES, ENRICHING LIVES/i.test(el.textContent || '') &&
+                              (el.className || '').toString().includes('border-t');
+      if(hasBrandFooter || looksLikeFooter) el.remove();
+    });
+  } else {
+    // Remove any old generated footer before adding exactly one.
+    [...slide.children].forEach(el=>{
+      if(el.querySelector && el.querySelector('.brand-tagline') && (el.className||'').toString().includes('border-t')) el.remove();
+    });
+    slide.insertAdjacentHTML('beforeend', footerHTML());
+  }
+
+  // Header is only added when the JSON page doesn't already contain one.
+  if(!slide.querySelector('.brand-name') || !slide.querySelector('.brand-title')){
+    slide.insertAdjacentHTML('afterbegin', headerHTML());
+  }
+
+  // Recipe information box: compact, but allow long values to wrap cleanly.
+  const recipeLabel = [...slide.querySelectorAll('*')].find(el =>
+    el.childElementCount === 0 && /Recipe Name:/i.test(el.textContent || '')
+  );
+  if(recipeLabel){
+    const box = recipeLabel.closest('.grid.grid-cols-2');
+    if(box){
+      box.classList.add('recipe-info-box');
+      ['p-3.5','p-4','my-2','my-1','gap-4'].forEach(c=>box.classList.remove(c));
+      ['p-2','my-1','gap-2'].forEach(c=>box.classList.add(c));
+      box.querySelectorAll('[class*="space-y-1.5"],[class*="space-y-2"]').forEach(x=>{
+        x.classList.remove('space-y-1.5','space-y-2');
+        x.classList.add('space-y-1');
+      });
+      box.querySelectorAll('.pr-4,.pl-2').forEach(x=>x.classList.remove('pr-4','pl-2'));
+      box.querySelectorAll('i').forEach(x=>x.classList.remove('mr-1.5'));
+      box.querySelectorAll('.flex.items-center.justify-between').forEach(row=>row.classList.add('gap-2'));
+      box.querySelectorAll('span').forEach(x=>x.style.lineHeight='1.15');
+    }
+
+    // Ingredients: use two compact columns when there are enough items.
+    const ingredientHeading = [...slide.querySelectorAll('*')].find(el =>
+      el.childElementCount === 0 && /INGREDIENTS/i.test(el.textContent || '')
+    );
+    if(ingredientHeading){
+      const ingredientsPanel = ingredientHeading.closest('.flex.flex-col');
+      const list = ingredientsPanel && ingredientsPanel.querySelector('ul');
+      if(list){
+        list.style.display='grid';
+        list.style.gridTemplateColumns='repeat(2,minmax(0,1fr))';
+        list.style.alignItems='start';
+        list.querySelectorAll('li').forEach(li=>{ li.style.margin='0'; li.style.padding='0'; li.style.breakInside='avoid'; });
+        list.style.columnGap='18px';
+        list.style.rowGap='4px';
+        list.style.paddingLeft='6px';
+        list.style.lineHeight='1.2';
+      }
+    }
+  }
+}
+
+function renderProject(raw,notify=true){
+ try{
+  const slides=normalizeSlides(raw);
+  const wrapper=document.getElementById('slidesWrapper'); wrapper.innerHTML='';
+  slides.forEach((item,i)=>{
+    const slide=document.createElement('div');
+    slide.id=`slide-${i+1}`; slide.dataset.pageNumber=i+1; slide.dataset.title=item.title || inferTitle(item.htmlContent,i+1);
+    slide.className='slide-canvas p-8 flex flex-col justify-between';
+    slide.innerHTML=item.htmlContent;
+    ensureStructure(slide);
+    // Remove nested accidental canvas wrappers, if any
+    slide.querySelectorAll('.slide-canvas').forEach(n=>{if(n!==slide)n.classList.remove('slide-canvas');});
+    wrapper.appendChild(slide);
+  });
+  // Brand fields are read from the loaded HTML when possible.
+  syncBrandInputsFromSlides();
+  renderTabs(); switchSlide(1);
+  calculateTotalCalories(); calcBMI();
+  if(notify) alert(`JSON loaded successfully — ${slides.length} pages ready.`);
+ }catch(e){console.error(e);alert(e.message||'Could not load JSON.');}
+}
+function renderTabs(){
+ const c=document.getElementById('slideTabsContainer'); if(!c)return; c.innerHTML='';
+ document.querySelectorAll('#slidesWrapper > .slide-canvas').forEach((s,i)=>{
+  const n=i+1,b=document.createElement('button'); b.id=`tab-${n}`; b.onclick=()=>switchSlide(n);
+  b.className=`slide-tab px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1 whitespace-nowrap ${n===activeSlideIndex?'bg-pink-600 text-white font-semibold':'text-slate-300 hover:text-white hover:bg-slate-700'}`;
+  b.innerHTML=`<span>${n}. ${s.dataset.title||`Slide ${n}`}</span>`; c.appendChild(b);
+ });
+}
+function switchSlide(n){activeSlideIndex=n; document.querySelectorAll('#slidesWrapper > .slide-canvas').forEach((s,i)=>s.classList.toggle('hidden',i!==n-1)); renderTabs();}
+function duplicateCurrentSlide(){
+ const wrapper = document.getElementById('slidesWrapper');
+ const slides = Array.from(wrapper.querySelectorAll(':scope > .slide-canvas'));
+ const cur = slides[activeSlideIndex - 1];
+ if (!cur) return;
+
+ // Duplicate immediately AFTER the current page, not at the end.
+ const clone = cur.cloneNode(true);
+ clone.dataset.title = (cur.dataset.title || `Slide ${activeSlideIndex}`) + ' (Copy)';
+ wrapper.insertBefore(clone, cur.nextElementSibling);
+
+ // Re-number every slide so tabs, PDF selection and IDs stay correct.
+ const updatedSlides = Array.from(wrapper.querySelectorAll(':scope > .slide-canvas'));
+ updatedSlides.forEach((slide, index) => {
+   slide.id = `slide-${index + 1}`;
+   slide.dataset.pageNumber = index + 1;
+   // Re-apply page rules after insertion so a duplicated recipe never regains a footer.
+   ensureStructure(slide);
+ });
+
+ renderTabs();
+ switchSlide(activeSlideIndex + 1);
+}
+function toggleBrandDrawer(){const d=document.getElementById('brandDrawer');d.classList.toggle('hidden');d.classList.toggle('flex');}
+function updateGlobalBranding(){
+ const vals={name:document.getElementById('global-name')?.value||'',title:document.getElementById('global-title')?.value||'',phone:document.getElementById('global-phone')?.value||'',insta:document.getElementById('global-insta')?.value||'',tagline:document.getElementById('global-tagline')?.value||''};
+ const p=vals.name.trim().split(/\s+/); const first=p.shift()||'Muneeba',last=p.join(' ')||'Munir';
+ document.querySelectorAll('.brand-name').forEach(e=>e.innerText=first); document.querySelectorAll('.brand-name-last').forEach(e=>e.innerText=last); document.querySelectorAll('.brand-name-full').forEach(e=>e.innerText=vals.name); document.querySelectorAll('.brand-title').forEach(e=>e.innerText=vals.title); document.querySelectorAll('.brand-phone').forEach(e=>e.innerText=vals.phone); document.querySelectorAll('.brand-insta').forEach(e=>e.innerText=vals.insta); document.querySelectorAll('.brand-tagline').forEach(e=>e.innerText=vals.tagline);
+}
+function syncBrandInputsFromSlides(){
+ const first=document.querySelector('#slidesWrapper .slide-canvas'); if(!first)return;
+ const get=s=>first.querySelector(s)?.textContent.trim();
+ const name=get('.brand-name-full')||'Muneeba Munir', title=get('.brand-title')||'DIETITIAN | BS HND', phone=get('.brand-phone')||'+92 315 5687486', insta=get('.brand-insta')||'muneeba_munir07', tag=get('.brand-tagline')||'NOURISHING BODIES, ENRICHING LIVES';
+ const set=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v}; set('global-name',name);set('global-title',title);set('global-phone',phone);set('global-insta',insta);set('global-tagline',tag);
+}
+function calculateTotalCalories(){let sum=0;document.querySelectorAll('.meal-cal').forEach(e=>sum+=parseInt((e.innerText||'').replace(/[^0-9.-]/g,''),10)||0);const t=document.getElementById('total-calories-val');if(t)t.innerText=sum;}
+function calcBMI(){const w=(document.getElementById('weight-input')?.innerText||'').match(/[0-9]+(?:\.[0-9]+)?/);const h=(document.getElementById('height-input')?.innerText||'').match(/([0-9]+(?:\.[0-9]+)?)\s*cm/i);if(!w||!h)return;const bmi=(parseFloat(w[0])/(parseFloat(h[1])/100)**2).toFixed(1);let cat='Normal Weight';if(bmi<18.5)cat='Underweight';else if(bmi<25)cat='Normal Weight';else if(bmi<30)cat='Overweight';else cat='Obese';const d=document.getElementById('bmi-display');if(d)d.innerText=`${bmi} (${cat})`;}
+function exportJSON(){
+ const slides=[...document.querySelectorAll('#slidesWrapper > .slide-canvas')].map((s,i)=>({slideNumber:i+1,title:s.dataset.title||`Slide ${i+1}`,htmlContent:s.innerHTML}));
+ const payload={brand:{name:document.getElementById('global-name')?.value||'',title:document.getElementById('global-title')?.value||'',phone:document.getElementById('global-phone')?.value||'',insta:document.getElementById('global-insta')?.value||'',tagline:document.getElementById('global-tagline')?.value||''},slides};
+ downloadBlob(JSON.stringify(payload,null,2),'dietitian_nutrition_project.json','application/json');
+}
+function downloadBlob(text,name,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
+function openPdfModal(){
+ const list=document.getElementById('modalPageList'); list.innerHTML=''; document.querySelectorAll('#slidesWrapper > .slide-canvas').forEach((s,i)=>{const n=i+1,l=document.createElement('label');l.className='flex items-center justify-between p-2.5 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer text-xs';l.innerHTML=`<div class="flex items-center space-x-2.5"><input type="checkbox" value="${n}" checked class="pdf-page-checkbox rounded text-pink-600 focus:ring-pink-500 w-4 h-4"><span class="font-bold text-slate-700">Slide ${n}:</span><span class="text-slate-600">${escapeHtml(s.dataset.title||`Slide ${n}`)}</span></div><i class="fa-solid fa-file text-slate-300"></i>`;list.appendChild(l);});document.getElementById('pdfModal').classList.remove('hidden');}
+function closePdfModal(){document.getElementById('pdfModal').classList.add('hidden');}
+function selectAllPages(v){document.querySelectorAll('.pdf-page-checkbox').forEach(x=>x.checked=v);}
+function escapeHtml(x){return String(x).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
+async function renderSlideHighQuality(slideElement) {
+    const wasHidden = slideElement.classList.contains('hidden');
+    const previousActive = activeSlideIndex;
+
+    // Allow the page to grow when its content needs more room. Never crop the bottom.
+    slideElement.classList.remove('hidden');
+    slideElement.style.width = '1000px';
+    slideElement.style.height = 'auto';
+    slideElement.style.minHeight = '625px';
+    slideElement.style.margin = '0';
+    slideElement.style.transform = 'none';
+    slideElement.style.overflow = 'visible';
+
+    // Give the browser time to finish fonts/layout before measuring/capturing.
+    if (document.fonts && document.fonts.ready) await document.fonts.ready;
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const captureWidth = 1000;
+    const captureHeight = Math.max(625, Math.ceil(slideElement.scrollHeight), Math.ceil(slideElement.getBoundingClientRect().height));
+    slideElement.style.height = captureHeight + 'px';
+
+    const canvas = await html2canvas(slideElement, {
+        scale: 4,
+        width: captureWidth,
+        height: captureHeight,
+        windowWidth: captureWidth,
+        windowHeight: captureHeight,
+        useCORS: true,
+        allowTaint: false,
+        backgroundColor: '#ffffff',
+        logging: false,
+        imageTimeout: 0,
+        removeContainer: true,
+        onclone: (clonedDoc) => {
+            const clonedSlide = clonedDoc.getElementById(slideElement.id);
+            if (clonedSlide) {
+                clonedSlide.classList.remove('hidden');
+                clonedSlide.style.width = '1000px';
+                clonedSlide.style.height = captureHeight + 'px';
+                clonedSlide.style.minHeight = '625px';
+                clonedSlide.style.overflow = 'visible';
+                clonedSlide.style.margin = '0';
+                clonedSlide.style.transform = 'none';
+                clonedSlide.style.boxShadow = 'none';
+                clonedSlide.style.borderRadius = '0';
+            }
+        }
+    });
+
+    slideElement.style.height = '';
+    slideElement.style.minHeight = '';
+    slideElement.style.overflow = '';
+    if (wasHidden) slideElement.classList.add('hidden');
+    return canvas;
+}
+
+async function generateCustomPdf(){
+    const selected = [...document.querySelectorAll('.pdf-page-checkbox:checked')]
+        .map(x => +x.value);
+
+    if (!selected.length) {
+        alert('Please select at least one slide.');
+        return;
+    }
+
+    const overlay = document.getElementById('pdfProgressOverlay');
+    const status = document.getElementById('pdfStatusText');
+    overlay.classList.remove('hidden');
+
+    try {
+        const { jsPDF } = window.jspdf;
+
+        // IMPORTANT: the editor canvas is 1000x625 = 8:5.
+        // Keep exactly the same ratio in the PDF so nothing gets stretched/cropped.
+        const PDF_W = 256;
+        const PDF_H = 160;
+        const pdf = new jsPDF({
+            orientation: 'landscape',
+            unit: 'mm',
+            format: [PDF_W, PDF_H],
+            compress: true,
+            putOnlyUsedFonts: true
+        });
+
+        const slides = [...document.querySelectorAll('#slidesWrapper > .slide-canvas')];
+        const oldActive = activeSlideIndex;
+
+        for (let i = 0; i < selected.length; i++) {
+            const slide = slides[selected[i] - 1];
+            if (!slide) continue;
+
+            status.innerText = `Rendering slide ${i + 1} of ${selected.length} in high quality...`;
+            const canvas = await renderSlideHighQuality(slide);
+
+            // PNG keeps small text, icons and lines much sharper than JPEG.
+            const imgData = canvas.toDataURL('image/png');
+
+            if (i > 0) pdf.addPage([PDF_W, PDF_H], 'landscape');
+            pdf.addImage(imgData, 'PNG', 0, 0, PDF_W, PDF_H, undefined, 'FAST');
+        }
+
+        switchSlide(oldActive);
+        status.innerText = 'Creating high-quality PDF...';
+        await new Promise(r => setTimeout(r, 150));
+        pdf.save('Dietitian_Nutrition_Plan_HQ.pdf');
+    } catch (error) {
+        console.error(error);
+        alert('PDF export failed. Please try again.');
+    } finally {
+        overlay.classList.add('hidden');
+        closePdfModal();
+    }
+}
+
+async function openPptModal() {
+    const slides = [...document.querySelectorAll('#slidesWrapper > .slide-canvas')];
+    if (!slides.length) { alert('Please load or create slides first.'); return; }
+
+    let modal = document.getElementById('pptModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'pptModal';
+        modal.className = 'fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center';
+        modal.innerHTML = `
+          <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl p-6 relative">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <h3 class="text-base font-bold text-slate-800"><i class="fa-solid fa-file-powerpoint text-orange-600"></i> Select Pages for PPT</h3>
+              <button onclick="closePptModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="flex items-center justify-between mb-3 text-xs">
+              <span class="text-slate-500 font-medium">Choose pages to include:</span>
+              <div class="space-x-2">
+                <button onclick="selectAllPptPages(true)" class="text-orange-600 hover:underline font-semibold">Select All</button>
+                <span class="text-slate-300">|</span>
+                <button onclick="selectAllPptPages(false)" class="text-slate-500 hover:underline">Clear</button>
+              </div>
+            </div>
+            <div id="pptPageList" class="space-y-2 max-h-60 overflow-y-auto pr-2 mb-5"></div>
+            <div class="flex justify-end space-x-3 pt-3 border-t border-slate-100">
+              <button onclick="closePptModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs font-semibold">Cancel</button>
+              <button onclick="generateSelectedPpt()" id="pptExportSubmitBtn" class="px-5 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-xs font-semibold flex items-center gap-2 shadow"><i class="fa-solid fa-file-powerpoint"></i> Export PPT</button>
+            </div>
+          </div>`;
+        document.body.appendChild(modal);
+    }
+    const list = document.getElementById('pptPageList');
+    list.innerHTML = '';
+    slides.forEach((slide, idx) => {
+        const title = slide.getAttribute('data-title') || `Slide ${idx + 1}`;
+        const label = document.createElement('label');
+        label.className = 'flex items-center justify-between p-2.5 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer text-xs';
+        label.innerHTML = `<div class="flex items-center space-x-2.5"><input type="checkbox" value="${idx + 1}" checked class="ppt-page-checkbox rounded text-orange-600 focus:ring-orange-500 w-4 h-4"><span class="font-bold text-slate-700">Slide ${idx + 1}:</span><span class="text-slate-600">${title}</span></div><i class="fa-solid fa-file-powerpoint text-slate-300"></i>`;
+        list.appendChild(label);
+    });
+    modal.classList.remove('hidden');
+}
+
+function closePptModal() {
+    const modal = document.getElementById('pptModal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function selectAllPptPages(select) {
+    document.querySelectorAll('.ppt-page-checkbox').forEach(cb => cb.checked = select);
+}
+
+async function generateSelectedPpt() {
+    const selected = [...document.querySelectorAll('.ppt-page-checkbox:checked')].map(cb => parseInt(cb.value, 10));
+    if (!selected.length) { alert('Please select at least one slide page to export.'); return; }
+
+    const slides = [...document.querySelectorAll('#slidesWrapper > .slide-canvas')];
+    const button = document.getElementById('pptExportSubmitBtn');
+    if (button) { button.disabled = true; button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Rendering...'; }
+    const oldActive = activeSlideIndex;
+
+    try {
+        const pptx = new PptxGenJS();
+        pptx.defineLayout({ name: 'NUTRITION_8_5', width: 12.8, height: 8.0 });
+        pptx.layout = 'NUTRITION_8_5';
+        pptx.author = 'Dietitian Slide Suite';
+        pptx.subject = 'Nutrition Plan';
+        pptx.title = 'Dietitian Nutrition Plan';
+        pptx.company = 'Dietitian Slide Suite';
+        pptx.lang = 'en-US';
+        pptx.theme = { headFontFace: 'Montserrat', bodyFontFace: 'Poppins', lang: 'en-US' };
+
+        for (let i = 0; i < selected.length; i++) {
+            const pageNo = selected[i];
+            const slideEl = slides[pageNo - 1];
+            if (!slideEl) continue;
+            if (button) button.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Slide ${i + 1}/${selected.length}`;
+            const canvas = await renderSlideHighQuality(slideEl);
+            const data = canvas.toDataURL('image/png');
+            const pptSlide = pptx.addSlide();
+            pptSlide.background = { color: 'FFFFFF' };
+            const ratio = canvas.height / canvas.width;
+            const maxW = 12.8, maxH = 8.0;
+            let w = maxW, h = w * ratio;
+            if (h > maxH) { h = maxH; w = h / ratio; }
+            pptSlide.addImage({ data, x: (maxW - w) / 2, y: (maxH - h) / 2, w, h });
+        }
+        switchSlide(oldActive);
+        if (button) button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
+        await pptx.writeFile({ fileName: 'Dietitian_Nutrition_Plan_Selected.pptx' });
+        closePptModal();
+    } catch (error) {
+        console.error(error);
+        alert('PowerPoint export failed. Please try again.');
+    } finally {
+        if (button) { button.disabled = false; button.innerHTML = '<i class="fa-solid fa-file-powerpoint"></i> Export PPT'; }
+    }
+}
+
+function exportPPTX() { openPptModal(); }
+
+</script>
+</body>
+</html>
